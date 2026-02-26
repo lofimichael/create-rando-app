@@ -1,7 +1,7 @@
 {
   "name": "create-rando-app",
-  "version": "0.1.0",
-  "description": "Scaffold projects for Dev Rando challenges",
+  "version": "0.2.0",
+  "description": "Scaffold projects for Dev Rando dependency challenges",
   "type": "module",
   "bin": {
     "create-rando-app": "bin/create-rando-app.js"
@@ -12,10 +12,13 @@
     "LICENSE"
   ],
   "scripts": {
-    "test": "node --version"
+    "test": "node bin/create-rando-app.js --help"
   },
   "keywords": [
     "dev-rando",
+    "create-rando-app",
+    "challenge",
+    "dependencies",
     "scaffold",
     "cli"
   ],
