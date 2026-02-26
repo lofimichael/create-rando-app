@@ -162,18 +162,60 @@ function depsHashFor(dependencies, devDependencies) {
   return crypto.createHash("sha256").update(canonical).digest("hex");
 }
 
-function buildPackageJson(packageName, dependencies, devDependencies, bundleSlug = "local-seed") {
+function buildInlineVerifyCommand({ expectedHash, expectedDependencies, expectedDevDependencies }) {
+  const source = `const fs = require("node:fs");
+const crypto = require("node:crypto");
+const assert = require("node:assert/strict");
+const { execSync } = require("node:child_process");
+
+const expectedHash = ${JSON.stringify(expectedHash)};
+const expectedDependencies = ${JSON.stringify(normalizeMap(expectedDependencies))};
+const expectedDevDependencies = ${JSON.stringify(normalizeMap(expectedDevDependencies))};
+
+const packageJson = JSON.parse(fs.readFileSync("./package.json", "utf8"));
+const normalizeMap = (obj) => Object.fromEntries(
+  Object.entries(obj || {})
+    .map(([name, version]) => [String(name), String(version)])
+    .sort(([left], [right]) => left.localeCompare(right))
+);
+
+const dependencies = normalizeMap(packageJson.dependencies || {});
+const devDependencies = normalizeMap(packageJson.devDependencies || {});
+const canonical = JSON.stringify({ dependencies, devDependencies });
+const observedHash = crypto.createHash("sha256").update(canonical).digest("hex");
+assert.equal(observedHash, expectedHash, "Dependencies integrity check failed");
+
+assert.deepEqual(dependencies, expectedDependencies, "Dependencies set mismatch");
+assert.deepEqual(devDependencies, expectedDevDependencies, "Dev dependencies set mismatch");
+
+const tree = JSON.parse(execSync("npm ls --depth=0 --json", { stdio: ["ignore", "pipe", "pipe"] }).toString());
+const extraneous = Object.entries(tree.dependencies || {})
+  .filter(([, meta]) => meta && meta.extraneous)
+  .map(([name]) => name);
+assert.equal(extraneous.length, 0, \`Extraneous installed packages detected: \${extraneous.join(", ")}\`);
+
+console.log("✨ READY TO RANDO ✨");
+console.log("✨ Dependencies integrity verified ✨");
+console.log("✨ READY TO RANDO ✨");`;
+
+  const encoded = Buffer.from(source, "utf8").toString("base64");
+  return `node -e "eval(Buffer.from('${encoded}','base64').toString())"`;
+}
+
+function buildPackageJson(packageName, dependencies, devDependencies, verifyCommand, bundleSlug = "local-seed") {
   return JSON.stringify({
     name: packageName,
     version: "0.1.0",
     private: true,
     type: "module",
     scripts: {
-      prepare: "npm run verify:rando",
+      prepare: "npm run verify",
+      verify: verifyCommand,
+      "verify-deps": "npm run verify",
       dev: "node src/index.js",
-      "validate:rando": "node scripts/verify-rando.js",
-      "verify:rando": "node scripts/verify-rando.js",
-      test: "npm run validate:rando"
+      "validate:rando": "npm run verify",
+      "verify:rando": "npm run verify",
+      test: "npm run verify"
     },
     dependencies: normalizeMap(dependencies),
     devDependencies: normalizeMap(devDependencies),
@@ -214,65 +256,6 @@ function buildDevRandoConfig({
   }, null, 2) + "\n";
 }
 
-function buildValidatorScript() {
-  return `import fs from "node:fs";
-import crypto from "node:crypto";
-import assert from "node:assert/strict";
-import { execSync } from "node:child_process";
-
-const config = JSON.parse(fs.readFileSync("devrando.config.json", "utf8"));
-const packageJson = JSON.parse(fs.readFileSync("package.json", "utf8"));
-
-const dependencies = packageJson.dependencies || {};
-const devDependencies = packageJson.devDependencies || {};
-
-const normalizeMap = (obj) =>
-  Object.fromEntries(
-    Object.entries(obj || {})
-      .map(([name, version]) => [String(name), String(version)])
-      .sort(([left], [right]) => left.localeCompare(right))
-  );
-
-const allowedDependencies = normalizeMap(config.allowed?.dependencies || {});
-const allowedDevDependencies = normalizeMap(config.allowed?.devDependencies || {});
-const currentDependencies = normalizeMap(dependencies);
-const currentDevDependencies = normalizeMap(devDependencies);
-
-const canonical = JSON.stringify({
-  dependencies: currentDependencies,
-  devDependencies: currentDevDependencies
-});
-const depsHash = crypto.createHash("sha256").update(canonical).digest("hex");
-assert.equal(depsHash, config.depsHash, "Dependencies integrity check failed");
-
-const allowedNames = new Set([
-  ...Object.keys(allowedDependencies),
-  ...Object.keys(allowedDevDependencies)
-]);
-const currentNames = new Set([
-  ...Object.keys(currentDependencies),
-  ...Object.keys(currentDevDependencies)
-]);
-
-const unexpected = [ ...currentNames ].filter((name) => !allowedNames.has(name));
-const missing = [ ...allowedNames ].filter((name) => !currentNames.has(name));
-assert.equal(unexpected.length, 0, \`Unexpected dependencies present: \${unexpected.join(", ")}\`);
-assert.equal(missing.length, 0, \`Expected dependencies missing: \${missing.join(", ")}\`);
-
-const minDependencies = Number(config.constraints?.minDependencies || 1);
-assert.ok(currentNames.size >= minDependencies, \`Need at least \${minDependencies} dependencies, found \${currentNames.size}.\`);
-
-const lsOutput = execSync("npm ls --depth=0 --json", { stdio: ["ignore", "pipe", "pipe"] }).toString();
-const npmTree = JSON.parse(lsOutput);
-const extraneous = Object.entries(npmTree.dependencies || {})
-  .filter(([, meta]) => meta && meta.extraneous)
-  .map(([name]) => name);
-assert.equal(extraneous.length, 0, \`Extraneous installed packages detected: \${extraneous.join(", ")}\`);
-
-console.log("✨ READY TO RANDO ✨ Dependencies integrity verified");
-`;
-}
-
 function buildReadme(directoryName, challengeSlug) {
   return `# ${directoryName}
 
@@ -285,7 +268,7 @@ Generated by create-rando-app.
 ## Commands
 
 - \`npm install\`
-- \`npm run validate:rando\`
+- \`npm run verify\`
 - \`npm run dev\`
 `;
 }
@@ -364,14 +347,18 @@ function localFallbackBundle(options, packageName) {
     dependencies,
     devDependencies
   });
+  const verifyCommand = buildInlineVerifyCommand({
+    expectedHash: depsHashFor(dependencies, devDependencies),
+    expectedDependencies: dependencies,
+    expectedDevDependencies: devDependencies
+  });
 
   return {
     slug: "local-seed",
     starter: {
       files: {
-        "package.json": buildPackageJson(packageName, dependencies, devDependencies, "local-seed"),
+        "package.json": buildPackageJson(packageName, dependencies, devDependencies, verifyCommand, "local-seed"),
         "devrando.config.json": config,
-        "scripts/verify-rando.js": buildValidatorScript(),
         "src/index.js": buildEntryPoint(),
         ".gitignore": "node_modules\n.DS_Store\n",
         "README.md": buildReadme(packageName, options.challenge)
@@ -413,7 +400,7 @@ function run() {
       console.log("Next steps:");
       console.log(`1) cd ${path.basename(targetDir)}`);
       console.log("2) npm install");
-      console.log("3) npm run verify:rando");
+      console.log("3) npm run verify");
       console.log("4) npm run dev");
     });
 }

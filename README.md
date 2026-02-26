@@ -41,9 +41,8 @@ npx create-rando-app@latest my-rando-solution \
 
 ## Generated Files
 
-- `package.json` with `verify:rando` and `prepare` script.
+- `package.json` with fully inlined `verify` crypto/integrity command (`verify-deps` kept as alias).
 - `devrando.config.json` challenge metadata.
-- `scripts/verify-rando.js` strict allowlist/hash/extraneous checks.
 - `src/index.js` placeholder implementation entrypoint.
 
 ## Why

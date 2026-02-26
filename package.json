@@ -1,6 +1,6 @@
 {
   "name": "create-rando-app",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Scaffold projects for Dev Rando hosted seed bundles with strict integrity checks",
   "type": "module",
   "bin": {
