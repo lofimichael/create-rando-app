@@ -1,7 +1,7 @@
 {
   "name": "create-rando-app",
-  "version": "0.2.0",
-  "description": "Scaffold projects for Dev Rando dependency challenges",
+  "version": "0.3.0",
+  "description": "Scaffold projects for Dev Rando hosted seed bundles with strict integrity checks",
   "type": "module",
   "bin": {
     "create-rando-app": "bin/create-rando-app.js"
@@ -19,6 +19,8 @@
     "create-rando-app",
     "challenge",
     "dependencies",
+    "seed-bundle",
+    "integrity",
     "scaffold",
     "cli"
   ],
