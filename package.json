@@ -1,0 +1,23 @@
+{
+  "name": "create-rando-app",
+  "version": "0.1.0",
+  "description": "Scaffold projects for Dev Rando challenges",
+  "type": "module",
+  "bin": {
+    "create-rando-app": "bin/create-rando-app.js"
+  },
+  "files": [
+    "bin",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --version"
+  },
+  "keywords": [
+    "dev-rando",
+    "scaffold",
+    "cli"
+  ],
+  "license": "MIT"
+}
